@@ -171,6 +171,28 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Dokumentasi Section for User -->
+            <div class="mt-6 bg-white p-6 rounded-xl shadow-md">
+                <h2 class="text-lg font-semibold mb-4 border-b pb-2">Dokumentasi Kegiatan</h2>
+                <div class="grid md:grid-cols-2 gap-6">
+                    <div>
+                        <h3 class="font-semibold mb-2">Upload Foto Baru</h3>
+                        <div class="space-y-3">
+                             <input type="file" id="userPhotoUpload" accept="image/*" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-red-50 file:text-red-700 hover:file:bg-red-100">
+                             <textarea id="userPhotoCaption" placeholder="Tambahkan keterangan singkat..." rows="2" class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"></textarea>
+                             <button id="userUploadPhotoButton" class="w-full py-2 text-white bg-red-600 rounded-md hover:bg-red-700">Upload</button>
+                        </div>
+                    </div>
+                     <div>
+                        <h3 class="font-semibold mb-2">Galeri</h3>
+                        <div id="userGalleryContainer" class="grid grid-cols-2 sm:grid-cols-3 gap-4 max-h-96 overflow-y-auto bg-gray-50 p-4 rounded-lg">
+                           <!-- Foto akan muncul di sini -->
+                           <p id="userGalleryPlaceholder" class="col-span-full text-center text-gray-500">Belum ada foto yang diupload.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- ===== HALAMAN ADMIN ===== -->
@@ -209,23 +231,12 @@
             </div>
             
             <div class="bg-white p-6 rounded-xl shadow-md">
-                <h2 class="text-lg font-semibold mb-4 border-b pb-2">Dokumentasi Kegiatan</h2>
-                <div class="grid md:grid-cols-2 gap-6">
-                    <div>
-                        <h3 class="font-semibold mb-2">Upload Foto Baru</h3>
-                        <div class="space-y-3">
-                             <input type="file" id="photoUpload" accept="image/*" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-red-50 file:text-red-700 hover:file:bg-red-100">
-                             <textarea id="photoCaption" placeholder="Tambahkan keterangan singkat..." rows="2" class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"></textarea>
-                             <button id="uploadPhotoButton" class="w-full py-2 text-white bg-red-600 rounded-md hover:bg-red-700">Upload</button>
-                             <p class="text-xs text-gray-500 text-center">Catatan: Foto tidak disimpan permanen dan akan hilang saat halaman dimuat ulang.</p>
-                        </div>
-                    </div>
-                     <div>
-                        <h3 class="font-semibold mb-2">Galeri</h3>
-                        <div id="galleryContainer" class="grid grid-cols-2 sm:grid-cols-3 gap-4 max-h-96 overflow-y-auto bg-gray-50 p-4 rounded-lg">
-                           <!-- Foto akan muncul di sini -->
-                           <p id="galleryPlaceholder" class="col-span-full text-center text-gray-500">Belum ada foto yang diupload.</p>
-                        </div>
+                <h2 class="text-lg font-semibold mb-4 border-b pb-2">Bukti Dokumentasi Kegiatan</h2>
+                <div>
+                    <h3 class="font-semibold mb-2">Galeri</h3>
+                    <div id="adminGalleryContainer" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 max-h-96 overflow-y-auto bg-gray-50 p-4 rounded-lg">
+                       <!-- Foto akan muncul di sini -->
+                       <p id="adminGalleryPlaceholder" class="col-span-full text-center text-gray-500">Belum ada foto yang diupload.</p>
                     </div>
                 </div>
             </div>
@@ -277,14 +288,17 @@
         const qrModal = document.getElementById('qrModal');
         const closeQRModalButton = document.getElementById('closeQRModalButton');
         const qrcodeContainer = document.getElementById('qrcode');
-        const photoUpload = document.getElementById('photoUpload');
-        const photoCaption = document.getElementById('photoCaption');
-        const uploadPhotoButton = document.getElementById('uploadPhotoButton');
-        const galleryContainer = document.getElementById('galleryContainer');
-        const galleryPlaceholder = document.getElementById('galleryPlaceholder');
+        const userPhotoUpload = document.getElementById('userPhotoUpload');
+        const userPhotoCaption = document.getElementById('userPhotoCaption');
+        const userUploadPhotoButton = document.getElementById('userUploadPhotoButton');
+        const userGalleryContainer = document.getElementById('userGalleryContainer');
+        const userGalleryPlaceholder = document.getElementById('userGalleryPlaceholder');
+        const adminGalleryContainer = document.getElementById('adminGalleryContainer');
+        const adminGalleryPlaceholder = document.getElementById('adminGalleryPlaceholder');
 
         // === DATA & STATE ===
         let attendanceData = JSON.parse(localStorage.getItem('paskibraAttendance')) || [];
+        let galleryData = JSON.parse(localStorage.getItem('paskibraGallery')) || [];
         let html5QrCode;
         const QR_SECRET_KEY = "PASKIBRA_ABSENSI_";
 
@@ -303,6 +317,10 @@
             localStorage.setItem('paskibraAttendance', JSON.stringify(attendanceData));
         }
 
+        function saveGalleryData() {
+            localStorage.setItem('paskibraGallery', JSON.stringify(galleryData));
+        }
+
         function showPage(pageId) {
             loginPage.classList.add('hidden');
             userPage.classList.add('hidden');
@@ -315,6 +333,12 @@
             } else {
                 document.body.classList.remove('login-background');
                 document.body.classList.add('bg-gray-100');
+            }
+
+            if (pageId === 'userPage') {
+                renderGallery(userGalleryContainer, userGalleryPlaceholder);
+            } else if (pageId === 'adminPage') {
+                renderGallery(adminGalleryContainer, adminGalleryPlaceholder);
             }
         }
 
@@ -604,26 +628,44 @@
         }
 
         // --- Fitur Upload Foto ---
-        uploadPhotoButton.addEventListener('click', () => {
-            const file = photoUpload.files[0];
-            const caption = photoCaption.value;
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    galleryPlaceholder.classList.add('hidden');
+        function renderGallery(container, placeholder) {
+            container.innerHTML = '';
+            if (galleryData.length === 0) {
+                container.appendChild(placeholder);
+                placeholder.classList.remove('hidden');
+            } else {
+                placeholder.classList.add('hidden');
+                galleryData.forEach(photo => {
                     const galleryItem = document.createElement('div');
                     galleryItem.className = 'relative group';
                     galleryItem.innerHTML = `
-                        <img src="${e.target.result}" alt="${caption}" class="w-full h-24 object-cover rounded-md">
+                        <img src="${photo.src}" alt="${photo.caption}" class="w-full h-24 object-cover rounded-md">
                         <div class="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-md">
-                            <p class="text-white text-xs text-center p-1">${caption || 'Tanpa keterangan'}</p>
+                            <p class="text-white text-xs text-center p-1">${photo.caption || 'Tanpa keterangan'}</p>
                         </div>
                     `;
-                    galleryContainer.appendChild(galleryItem);
+                    container.appendChild(galleryItem);
+                });
+            }
+        }
+
+        userUploadPhotoButton.addEventListener('click', () => {
+            const file = userPhotoUpload.files[0];
+            const caption = userPhotoCaption.value;
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const newPhoto = {
+                        src: e.target.result,
+                        caption: caption || 'Tanpa keterangan'
+                    };
+                    galleryData.push(newPhoto);
+                    saveGalleryData();
+                    renderGallery(userGalleryContainer, userGalleryPlaceholder);
                 }
                 reader.readAsDataURL(file);
-                photoUpload.value = '';
-                photoCaption.value = '';
+                userPhotoUpload.value = '';
+                userPhotoCaption.value = '';
             }
         });
 
