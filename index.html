@@ -6,6 +6,8 @@
     <title>Aplikasi Absensi Paskibra</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Library Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <!-- Library untuk QR Code Scanner dan Generator -->
     <script src="https://cdn.jsdelivr.net/npm/qrcode-generator/qrcode.js"></script>
     <script src="https://unpkg.com/html5-qrcode/html5-qrcode.min.js"></script>
@@ -172,24 +174,45 @@
                 </div>
             </div>
 
+            <!-- RLS Alert for Upload - DIPERBARUI MENJADI LEBIH JELAS (MERAH) -->
+            <div id="rlsAlert" class="mt-6 bg-red-50 border-l-4 border-red-500 text-red-800 p-4 rounded-xl shadow-md">
+                <p class="font-bold">!! ERROR - KONFIGURASI DIPERLUKAN !!</p>
+                <p class="text-sm mt-1">Error 'violates row-level security policy' berarti Supabase memblokir upload/absensi Anda. Untuk memperbaikinya, Anda **WAJIB** mengatur 'Policies' (RLS) di Dashboard Supabase:</p>
+                <ul class="text-xs list-disc list-inside mt-2 ml-4 space-y-1 font-medium">
+                    <li><strong>UNTUK TABEL `gallery` & `attendance`:</strong>
+                        <ul class="list-disc list-inside ml-4 text-xs">
+                             <li>Buat 1 Policy `SELECT` -> Roles: `anon`, `authenticated` -> Expression: `TRUE`</li>
+                             <li>Buat 1 Policy `INSERT` -> Roles: `anon`, `authenticated` -> Expression: `TRUE`</li>
+                        </ul>
+                    </li>
+                     <li><strong>UNTUK STORAGE `gallery`:</strong>
+                        <ul class="list-disc list-inside ml-4 text-xs">
+                             <li>Buat 1 Policy `SELECT` -> Roles: `anon`, `authenticated` -> Expression: `(bucket_id = 'gallery')`</li>
+                             <li>Buat 1 Policy `INSERT` -> Roles: `anon`, `authenticated` -> Expression: `(bucket_id = 'gallery')`</li>
+                        </ul>
+                    </li>
+                </ul>
+                <p class="text-xs mt-2 font-semibold">Ini adalah masalah konfigurasi RLS, bukan bug pada kode. Harap ikuti langkah-langkah di atas di Supabase.</p>
+            </div>
+            
             <!-- Dokumentasi Section for User -->
             <div class="mt-6 bg-white p-6 rounded-xl shadow-md">
                 <h2 class="text-lg font-semibold mb-4 border-b pb-2">Dokumentasi Kegiatan</h2>
-                <div class="grid md:grid-cols-2 gap-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                        <h3 class="font-semibold mb-2">Upload Foto Baru (Saat ini nonaktif)</h3>
+                        <h3 class="font-semibold mb-2">Upload Foto Baru</h3>
                         <div class="space-y-3">
-                             <!-- Fitur upload foto dinonaktifkan karena Firebase Storage tidak tersedia di lingkungan ini -->
-                             <p class="text-sm text-gray-500 p-3 bg-yellow-50 rounded-md">
-                                Fitur upload foto untuk sementara dinonaktifkan karena keterbatasan platform.
-                             </p>
+                             <input type="file" id="userPhotoUpload" accept="image/*" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-red-50 file:text-red-700 hover:file:bg-red-100">
+                             <textarea id="userPhotoCaption" placeholder="Tambahkan keterangan singkat..." rows="2" class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"></textarea>
+                             <button id="userUploadPhotoButton" class="w-full py-2 text-white bg-red-600 rounded-md hover:bg-red-700">Upload</button>
+                             <p id="uploadMessage" class="text-sm text-center"></p>
                         </div>
                     </div>
                      <div>
                         <h3 class="font-semibold mb-2">Galeri</h3>
                         <div id="userGalleryContainer" class="grid grid-cols-2 sm:grid-cols-3 gap-4 max-h-96 overflow-y-auto bg-gray-50 p-4 rounded-lg">
-                           <!-- Foto akan muncul di sini (Dummy Data) -->
-                           <p id="userGalleryPlaceholder" class="col-span-full text-center text-gray-500">Memuat galeri...</p>
+                           <!-- Foto akan muncul di sini -->
+                           <p id="userGalleryPlaceholder" class="col-span-full text-center text-gray-500">Belum ada foto yang diupload.</p>
                         </div>
                     </div>
                 </div>
@@ -237,8 +260,8 @@
                 <div>
                     <h3 class="font-semibold mb-2">Galeri</h3>
                     <div id="adminGalleryContainer" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 max-h-96 overflow-y-auto bg-gray-50 p-4 rounded-lg">
-                       <!-- Foto akan muncul di sini (Dummy Data) -->
-                       <p id="adminGalleryPlaceholder" class="col-span-full text-center text-gray-500">Memuat galeri...</p>
+                       <!-- Foto akan muncul di sini -->
+                       <p id="adminGalleryPlaceholder" class="col-span-full text-center text-gray-500">Belum ada foto yang diupload.</p>
                     </div>
                 </div>
             </div>
@@ -260,60 +283,67 @@
         </div>
     </div>
 
-    <!-- Script Inisialisasi Firebase dan Logika Aplikasi -->
+    <!-- Script Inisialisasi Supabase dan Logika Aplikasi -->
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { 
-            getAuth, 
-            signInAnonymously, 
-            signInWithCustomToken, 
-            onAuthStateChanged 
-        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { 
-            getFirestore, 
-            collection, 
-            addDoc, 
-            query, 
-            where,
-            getDocs,
-            setLogLevel 
-        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        // === KONFIGURASI SUPABASE ===
+        // !!! PERHATIAN !!! GANTI KEDUA VARIABEL INI DENGAN URL DAN ANON KEY DARI PROYEK SUPABASE ANDA
+        const SUPABASE_URL = 'https://wvkikjwsdqnncvvgjhek.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind2a2lrandzZHFubmN2dmdqaGVrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAzMDAzMTYsImV4cCI6MjA3NTg3NjMxNn0.FBhcPljaoECjK2Nqi6J5R2hn3dPqJXeC4EDioDbFSfc'; 
 
-        // Global Variables
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-paskibra-app';
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-        // Firebase Service Instances
-        let app;
-        let db;
-        let auth;
-        let userId = null;
-        let isAuthReady = false;
-
-        // Utility Path Function
-        const getAttendanceCollectionRef = () => {
-             // Menggunakan public/data karena data absensi harus dilihat oleh Admin (semua user)
-            return collection(db, 'artifacts', appId, 'public', 'data', 'attendance');
-        };
+        let supabase;
         
-        const getGalleryCollectionRef = () => {
-             // Menggunakan public/data untuk galeri yang dapat dilihat semua anggota/admin
-            return collection(db, 'artifacts', appId, 'public', 'data', 'gallery');
-        };
+        /*
+         * ==============================================================================
+         * !!!!!! PERINGATAN KRITIS: KEBIJAKAN RLS (Row Level Security) !!!!!!
+         * ==============================================================================
+         * * KESALAHAN "violates row-level security policy" BERASAL DARI KONFIGURASI SUPABASE.
+         * Kode ini menggunakan kunci Anonim (Anon Key) sehingga RLS HARUS diatur
+         * untuk mengizinkan peran "anon" dan "authenticated".
+         * * MOHON LAKUKAN LANGKAH-LANGKAH INI DI DASHBOARD SUPABASE ANDA:
+         * * 1. PENGATURAN TABEL (Menu Database > Tables):
+         * - Pastikan Anda **sudah membuat** tabel 'attendance' dan 'gallery' di Supabase.
+         * - Pastikan RLS (Row Level Security) **diaktifkan** untuk kedua tabel tersebut.
+         * * 2. KEBIJAKAN RLS TABEL (Menu Database > Policies):
+         * a. TABEL 'gallery' (Untuk upload dokumentasi):
+         * - Kebijakan 1 (SELECT - Melihat Foto): Allows: SELECT, Target Roles: anon, authenticated, Ekspresi: TRUE
+         * - Kebijakan 2 (INSERT - Mengunggah Foto): Allows: INSERT, Target Roles: anon, authenticated, Ekspresi: TRUE
+         * * b. TABEL 'attendance' (Untuk absensi):
+         * - Kebijakan 1 (SELECT - Melihat Absensi): Allows: SELECT, Target Roles: anon, authenticated, Ekspresi: TRUE
+         * - Kebijakan 2 (INSERT - Mengirim Absensi): Allows: INSERT, Target Roles: anon, authenticated, Ekspresi: TRUE
+         * * 3. STORAGE BUCKET GALLERY (Menu Storage > Policies):
+         * - Pastikan Anda memiliki bucket bernama 'gallery'.
+         * - Tambahkan kebijakan di bucket 'gallery' untuk:
+         * - Policy 1 (SELECT/Download): Allows: SELECT, Target Roles: anon, authenticated, Ekspresi: (bucket_id = 'gallery')
+         * - Policy 2 (INSERT/Upload): Allows: INSERT, Target Roles: anon, authenticated, Ekspresi: (bucket_id = 'gallery')
+         * * *Setelah semua RLS Policy ini diatur dan API Key diisi, error "violates row-level security policy" akan hilang.*
+         */
+
+
+        // Cek apakah URL dan Key sudah diisi
+        const configErrorDiv = document.createElement('div');
+        configErrorDiv.className = "p-8 bg-red-100 text-red-800 text-center";
+        configErrorDiv.innerHTML = `<h1 class="text-2xl font-bold">Konfigurasi Belum Selesai</h1><p class="mt-2">Silakan edit file <strong>absensi_paskibra.html</strong> dan isi variabel <code>SUPABASE_URL</code> dan <code>SUPABASE_ANON_KEY</code> dengan kredensial dari proyek Supabase Anda. Aplikasi tidak dapat memuat data tanpa konfigurasi ini.</p><div class="text-xs text-gray-500 mt-4">Login hardcoded admin/admin123 atau user/user123 tetap bisa, tetapi data Supabase akan gagal dimuat.</div>`;
+
+        if (SUPABASE_URL === '' || SUPABASE_ANON_KEY === '') {
+            document.body.appendChild(configErrorDiv);
+        } else {
+            // Inisialisasi Supabase Client
+            try {
+                // Menggunakan window.supabase untuk mengakses fungsi createClient yang dimuat dari CDN.
+                supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                // Menghilangkan pesan error konfigurasi jika sudah berhasil inisialisasi
+                if (document.body.contains(configErrorDiv)) {
+                    document.body.removeChild(configErrorDiv);
+                }
+            } catch (e) {
+                 console.error("Gagal inisialisasi Supabase. Periksa URL dan Anon Key Anda.", e);
+                 document.body.appendChild(configErrorDiv);
+                 configErrorDiv.innerHTML = `<h1 class="text-2xl font-bold">Kesalahan Inisialisasi</h1><p class="mt-2">URL atau Anon Key Supabase yang Anda masukkan mungkin **Invalid**.</p><div class="text-xs text-gray-500 mt-4">Silakan cek kembali konstanta SUPABASE_URL dan SUPABASE_ANON_KEY.</div>`;
+            }
         
-        // Mock Gallery Data (Karena Firebase Storage tidak tersedia)
-        const MOCK_GALLERY = [
-            { image_url: "https://placehold.co/150x150/ef4444/ffffff?text=Latihan+Formasi", caption: "Latihan formasi bendera" },
-            { image_url: "https://placehold.co/150x150/22c55e/ffffff?text=Upacara+17an", caption: "Upacara bendera 17 Agustus" },
-            { image_url: "https://placehold.co/150x150/3b82f6/ffffff?text=Giat+Sosial", caption: "Kegiatan sosial membersihkan lingkungan" },
-            { image_url: "https://placehold.co/150x150/f97316/ffffff?text=PBB+Inti", caption: "Latihan PBB di lapangan" },
-        ];
-
-
-        // === ELEMEN DOM ===
-        const loadingSpinner = document.getElementById('loadingSpinner');
-        const loginPage = document.getElementById('loginPage');
+            // === ELEMEN DOM ===
+            const loadingSpinner = document.getElementById('loadingSpinner');
+            const loginPage = document.getElementById('loginPage');
         const userPage = document.getElementById('userPage');
         const adminPage = document.getElementById('adminPage');
         const usernameInput = document.getElementById('username');
@@ -344,15 +374,21 @@
         const qrModal = document.getElementById('qrModal');
         const closeQRModalButton = document.getElementById('closeQRModalButton');
         const qrcodeContainer = document.getElementById('qrcode');
+        const userPhotoUpload = document.getElementById('userPhotoUpload');
+        const userPhotoCaption = document.getElementById('userPhotoCaption');
+        const userUploadPhotoButton = document.getElementById('userUploadPhotoButton');
         const userGalleryContainer = document.getElementById('userGalleryContainer');
         const userGalleryPlaceholder = document.getElementById('userGalleryPlaceholder');
         const adminGalleryContainer = document.getElementById('adminGalleryContainer');
         const adminGalleryPlaceholder = document.getElementById('adminGalleryPlaceholder');
         const submitManualButton = document.getElementById('submitManualButton');
+        const uploadMessage = document.getElementById('uploadMessage');
+
 
         // === DATA & STATE ===
         let html5QrCode;
         const QR_SECRET_KEY = "PASKIBRA_ABSENSI_";
+        const GALLERY_BUCKET_NAME = 'gallery'; // Nama bucket Anda di Supabase Storage
 
         // === FUNGSI UTILITAS ===
         const showLoading = (show) => loadingSpinner.classList.toggle('hidden', !show);
@@ -361,7 +397,11 @@
             loginPage.classList.add('hidden');
             userPage.classList.add('hidden');
             adminPage.classList.add('hidden');
-            document.getElementById(pageId).classList.remove('hidden');
+            
+            const pageElement = document.getElementById(pageId);
+            if (pageElement) {
+                pageElement.classList.remove('hidden');
+            }
 
             if (pageId === 'loginPage') {
                 document.body.classList.add('login-background');
@@ -380,37 +420,50 @@
             return `${year}-${month}-${day}`;
         }
         
-        function showUserMessage(message, type) {
-            userMessage.textContent = message;
-            userMessage.className = `text-sm text-center ${
+        function showUserMessage(message, type, targetElement = userMessage) {
+            targetElement.innerHTML = message;
+            targetElement.className = `text-sm text-center ${
                 type === 'success' ? 'text-green-600' :
                 type === 'error' ? 'text-red-600' : 'text-yellow-600'
             }`;
-            setTimeout(() => { userMessage.textContent = ''; }, 4000);
+            setTimeout(() => { targetElement.innerHTML = ''; }, 8000); // Tampilkan error lebih lama
+        }
+        
+        /**
+         * Penanganan Error Koneksi Supabase yang Umum (TypeError: Failed to fetch)
+         */
+        function handleSupabaseFetchError(e, context) {
+            console.error(`Error in ${context}:`, e.message);
+            return "Gagal terhubung ke Supabase. Kemungkinan: **1. SUPABASE_URL atau ANON_KEY salah/kosong**; atau **2. Masalah RLS/Koneksi**.";
         }
 
         // === FUNGSI AUTH DAN NAVIGASI ===
 
         async function handleLogin() {
-            if (!isAuthReady) {
-                showUserMessage("Aplikasi belum siap. Coba lagi.", "error");
-                return;
-            }
-
             const username = usernameInput.value.trim();
             const password = passwordInput.value;
             showLoading(true);
+            
+            console.log("Attempting login for username:", username); // Log untuk debugging
 
             // Cek Kredensial Hardcoded
             if (username === 'admin' && password === 'admin123') {
+                console.log("Login successful: Admin");
                 showPage('adminPage');
-                await renderAdminDashboard();
-                await renderGallery(adminGalleryContainer, adminGalleryPlaceholder);
+                if (supabase) {
+                    await renderAdminDashboard();
+                    await renderGallery(adminGalleryContainer, adminGalleryPlaceholder);
+                }
             } else if (username === 'user' && password === 'user123') {
+                console.log("Login successful: User");
                 showPage('userPage');
                 checkAttendanceDay();
-                await renderGallery(userGalleryContainer, userGalleryPlaceholder);
+                 if (supabase) {
+                    await renderGallery(userGalleryContainer, userGalleryPlaceholder);
+                }
             } else {
+                console.log("Login failed: Invalid credentials");
+                loginError.textContent = "Username atau password salah!";
                 loginError.classList.remove('hidden');
             }
             showLoading(false);
@@ -439,49 +492,44 @@
         }
         
         /**
-         * Mengirim data absensi ke Firestore.
+         * Mengirim data absensi ke Supabase.
          */
         async function submitAttendance(nama, kelas, status, alasan = "") {
             const tanggal = getTodayDate();
-            if (!isAuthReady) {
-                 showUserMessage('Sistem belum terinisialisasi.', 'error');
-                 return false;
-            }
+            if (!supabase) return showUserMessage("Supabase belum terkonfigurasi. Cek API Key.", "error");
+            
             showLoading(true);
             
-            // 1. Cek apakah sudah absen hari ini
             try {
-                const q = query(
-                    getAttendanceCollectionRef(),
-                    where('tanggal', '==', tanggal),
-                    where('nama', '==', nama)
-                );
-                const querySnapshot = await getDocs(q);
+                // 1. Cek apakah sudah absen hari ini
+                const { data: existing, error: checkError } = await supabase
+                    .from('attendance')
+                    .select('id')
+                    .eq('tanggal', tanggal)
+                    .eq('nama', nama);
 
-                if (querySnapshot.docs.length > 0) {
+                if (checkError) throw checkError;
+
+                if (existing.length > 0) {
                     showUserMessage('Anda sudah mengisi absensi hari ini.', 'warning');
                     showLoading(false);
                     return false;
                 }
 
                 // 2. Kirim data baru
-                await addDoc(getAttendanceCollectionRef(), {
-                    tanggal, 
-                    nama, 
-                    kelas, 
-                    status, 
-                    alasan,
-                    createdAt: Date.now(),
-                    userId: userId // Simpan userId otentikasi
-                });
+                const { error: insertError } = await supabase
+                    .from('attendance')
+                    .insert([{ tanggal, nama, kelas, status, alasan: alasan || null }]);
+                
+                if (insertError) throw insertError;
 
                 showLoading(false);
                 showUserMessage('Absensi berhasil dikirim!', 'success');
                 return true;
 
             } catch (e) {
-                console.error("Gagal mengirim absensi:", e);
-                showUserMessage('Gagal mengirim absensi. Cek konsol.', 'error');
+                const message = handleSupabaseFetchError(e, 'submitting attendance');
+                showUserMessage(`Gagal mengirim absensi. Pastikan RLS di tabel "attendance" mengizinkan INSERT. ${message}`, 'error');
                 showLoading(false);
                 return false;
             }
@@ -522,6 +570,7 @@
                 showUserMessage("Mohon isi Nama dan Kelas sebelum scan QR.", 'error');
                 return;
             }
+            if (!supabase) return showUserMessage("Supabase belum terkonfigurasi. Cek API Key.", "error");
             
             qrReaderDiv.classList.remove('hidden');
             scanQRButton.textContent = "Tutup Scanner";
@@ -545,7 +594,7 @@
             };
             
             html5QrCode.start({ facingMode: "environment" }, config, qrCodeSuccessCallback)
-                .catch(err => console.error("Gagal memulai QR scanner:", err));
+                .catch(err => console.error("Gagal memulai QR scanner.", err));
         }
 
         function stopQRScanner() {
@@ -555,7 +604,7 @@
                         qrReaderDiv.classList.add('hidden');
                         scanQRButton.textContent = "Scan QR untuk Hadir";
                     })
-                    .catch(err => console.error("Gagal menghentikan QR Scanner:", err));
+                    .catch(err => console.error("Gagal menghentikan QR Scanner.", err));
             } else {
                 qrReaderDiv.classList.add('hidden');
                 scanQRButton.textContent = "Scan QR untuk Hadir";
@@ -570,7 +619,7 @@
             }
         });
 
-        // --- Riwayat & Poin Anggota (dengan Firestore) ---
+        // --- Riwayat & Poin Anggota (dengan Supabase) ---
 
         /**
          * Menghitung total poin, hadir, dan hari jadwal dari data absensi.
@@ -609,33 +658,37 @@
                 userPointDisplay.classList.add('hidden');
                 return;
             }
+            if (!supabase) return showUserMessage("Supabase belum terkonfigurasi. Cek API Key.", "error");
 
-            if (!isAuthReady) return;
             showLoading(true);
 
             try {
                 // 1. Ambil semua data absensi untuk menghitung total hari jadwal
-                const { docs: allAttendanceDocs } = await getDocs(query(getAttendanceCollectionRef()));
-                const allAttendanceData = allAttendanceDocs.map(doc => doc.data());
+                const { data: allAttendanceData, error: allError } = await supabase
+                    .from('attendance')
+                    .select('tanggal, nama, status');
+                if (allError) throw allError;
 
                 // 2. Ambil riwayat absensi pengguna yang dicari
-                const qUser = query(
-                    getAttendanceCollectionRef(),
-                    where('nama', '==', searchName) // Firestore tidak mendukung 'ilike', gunakan '==' untuk nama lengkap
-                );
-                const { docs: userDocs } = await getDocs(qUser);
-                const userRecords = userDocs.map(doc => ({ id: doc.id, ...doc.data() }));
+                const { data: userRecords, error: userError } = await supabase
+                    .from('attendance')
+                    .select('*')
+                    .ilike('nama', `%${searchName}%`) // Menggunakan ilike untuk pencarian fuzzy
+                    .order('created_at', { ascending: false });
+                if (userError) throw userError;
+
 
                 historyTableBody.innerHTML = '';
                 if (userRecords.length > 0) {
-                     // Urutkan di sisi klien (karena tidak menggunakan orderBy di query)
-                    userRecords.sort((a, b) => b.createdAt - a.createdAt);
+                    // Temukan nama yang paling cocok (jika ada beberapa hasil)
+                    const exactMatch = userRecords.find(r => r.nama.toLowerCase() === searchName.toLowerCase())
+                    const recordsToCalculate = exactMatch ? userRecords.filter(r => r.nama === exactMatch.nama) : userRecords;
                     
-                    const { points } = calculateStats(allAttendanceData, userRecords);
+                    const { points } = calculateStats(allAttendanceData, recordsToCalculate);
                     userPointsSpan.textContent = points;
                     userPointDisplay.classList.remove('hidden');
 
-                    userRecords.forEach(record => {
+                    recordsToCalculate.forEach(record => {
                         const row = document.createElement('tr');
                         let statusClass = '';
                         switch(record.status) {
@@ -647,25 +700,27 @@
                         historyTableBody.appendChild(row);
                     });
                 } else {
-                    historyTableBody.innerHTML = `<tr><td colspan="2" class="text-center p-4 text-gray-500">Tidak ada data untuk nama "${searchNameInput.value}". Pastikan nama lengkap sudah benar.</td></tr>`;
+                    historyTableBody.innerHTML = `<tr><td colspan="2" class="text-center p-4 text-gray-500">Tidak ada data untuk nama "${searchNameInput.value}".</td></tr>`;
                      userPointDisplay.classList.add('hidden');
                 }
             } catch (e) {
-                console.error("Error fetching user history from Firestore:", e);
-                historyTableBody.innerHTML = `<tr><td colspan="2" class="text-center p-4 text-red-500">Gagal memuat riwayat.</td></tr>`;
+                const message = handleSupabaseFetchError(e, 'fetching user history');
+                historyTableBody.innerHTML = `<tr><td colspan="2" class="text-center p-4 text-red-500">${message}</td></tr>`;
             }
             showLoading(false);
         }
 
-        // --- Halaman Admin (dengan Firestore) ---
+        // --- Halaman Admin (dengan Supabase) ---
         async function renderAdminDashboard() {
-            if (!isAuthReady) return;
+            if (!supabase) return console.error("Supabase tidak terinisialisasi. Tidak dapat memuat data admin.");
             showLoading(true);
 
             try {
                 // Ambil semua data absensi
-                const { docs: attendanceDocs } = await getDocs(query(getAttendanceCollectionRef()));
-                const attendanceData = attendanceDocs.map(doc => doc.data());
+                const { data: attendanceData, error } = await supabase
+                    .from('attendance')
+                    .select('tanggal, nama, kelas, status');
+                if (error) throw error;
             
                 const memberStats = {};
                 const scheduleDays = new Set(attendanceData.map(r => r.tanggal));
@@ -703,8 +758,12 @@
                     rekapTableBody.appendChild(row);
                 });
             } catch (e) {
-                console.error("Error fetching admin data from Firestore:", e);
-                rekapTableBody.innerHTML = `<tr><td colspan="8" class="text-center p-4 text-red-500">Gagal memuat data rekap.</td></tr>`;
+                // *** Perbaikan: Pesan error lebih spesifik untuk masalah tabel tidak ditemukan ***
+                let message = handleSupabaseFetchError(e, 'fetching admin data');
+                if (e && e.message && e.message.includes("Could not find the table")) {
+                    message = "Gagal memuat data admin. **Tabel 'attendance' belum ditemukan di database Anda**. Mohon buat tabel `attendance` di Supabase.";
+                }
+                rekapTableBody.innerHTML = `<tr><td colspan="8" class="text-center p-4 text-red-500">${message}</td></tr>`;
             }
             showLoading(false);
         }
@@ -741,31 +800,108 @@
             document.body.removeChild(link);
         }
 
-        // --- Fitur Galeri (Mock Data) ---
+        // --- Fitur Galeri (dengan Supabase Storage) ---
         async function renderGallery(container, placeholder) {
-            container.innerHTML = '';
-            placeholder.classList.add('hidden');
-            
-            MOCK_GALLERY.forEach(photo => {
-                const galleryItem = document.createElement('div');
-                galleryItem.className = 'relative group';
-                galleryItem.innerHTML = `
-                    <img src="${photo.image_url}" alt="${photo.caption}" class="w-full h-24 object-cover rounded-md">
-                    <div class="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-md">
-                        <p class="text-white text-xs text-center p-1">${photo.caption || 'Tanpa keterangan'}</p>
-                    </div>
-                `;
-                container.appendChild(galleryItem);
-            });
-            
-            // Tampilkan pesan bahwa fitur upload dinonaktifkan di halaman user
-            if (container === userGalleryContainer) {
-                 const warning = document.createElement('p');
-                 warning.className = 'col-span-full text-center text-sm text-yellow-700 bg-yellow-100 p-2 rounded-md';
-                 warning.textContent = 'Fitur Galeri menggunakan data dummy. Upload foto dinonaktifkan.';
-                 container.prepend(warning);
+            if (!supabase) return;
+            showLoading(true);
+
+            // Fetch list of photos from 'gallery' table
+            try {
+                const { data: galleryData, error } = await supabase
+                    .from('gallery')
+                    .select('*');
+                    // .order('created_at', { ascending: false }); // <-- DIHAPUS: Kolom 'created_at' tidak ada di database Anda.
+                
+                showLoading(false);
+                
+                if(error) throw error;
+
+                container.innerHTML = '';
+                placeholder.classList.toggle('hidden', galleryData.length > 0);
+
+                if (galleryData.length > 0) {
+                    // Jika tidak ada 'created_at', urutkan di sisi klien (walaupun Supabase mungkin tidak menjamin urutan)
+                    // Atau biarkan tanpa urutan
+                    
+                    galleryData.forEach(photo => {
+                        const galleryItem = document.createElement('div');
+                        galleryItem.className = 'relative group cursor-pointer'; // Tambahkan cursor-pointer
+                        galleryItem.setAttribute('data-url', photo.image_url);
+                        galleryItem.onclick = () => window.open(photo.image_url, '_blank');
+
+                        galleryItem.innerHTML = `
+                            <img src="${photo.image_url}" alt="${photo.caption}" class="w-full h-24 object-cover rounded-md transition-transform duration-200 group-hover:scale-[1.03]" onerror="this.src='https://placehold.co/150x150/ef4444/ffffff?text=Error'; this.alt='Gagal memuat gambar';">
+                            <div class="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-md p-1">
+                                <p class="text-white text-xs text-center line-clamp-2">${photo.caption || 'Tanpa keterangan'}</p>
+                            </div>
+                        `;
+                        container.appendChild(galleryItem);
+                    });
+                } else {
+                    placeholder.textContent = "Belum ada foto yang diupload.";
+                }
+            } catch (e) {
+                // *** Perbaikan: Pesan error lebih spesifik untuk masalah tabel tidak ditemukan ***
+                let message = handleSupabaseFetchError(e, 'fetching gallery');
+                if (e && e.message && e.message.includes("Could not find the table")) {
+                    message = "Gagal memuat galeri. **Tabel 'gallery' belum ditemukan di database Anda**. Mohon buat tabel `gallery` di Supabase.";
+                }
+                placeholder.textContent = message;
             }
         }
+
+        userUploadPhotoButton.addEventListener('click', async () => {
+            if (!supabase) return showUserMessage("Supabase belum terkonfigurasi. Cek API Key.", "error", uploadMessage);
+
+            const file = userPhotoUpload.files[0];
+            const caption = userPhotoCaption.value;
+            if (!file) return showUserMessage("Pilih file gambar untuk diunggah.", "warning", uploadMessage);
+
+            showLoading(true);
+            // Ganti nama file untuk mencegah konflik
+            const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}_${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+            
+            try {
+                // 1. Upload file ke Storage
+                const { error: uploadError } = await supabase.storage
+                    .from(GALLERY_BUCKET_NAME) // Nama bucket Anda
+                    .upload(fileName, file);
+
+                if (uploadError) throw uploadError;
+
+                // 2. Dapatkan URL publik dari file yang diupload
+                const { data } = supabase.storage
+                    .from(GALLERY_BUCKET_NAME)
+                    .getPublicUrl(fileName);
+                
+                const publicUrl = data.publicUrl;
+
+                // 3. Simpan URL dan caption ke tabel 'gallery'
+                const { error: insertError } = await supabase
+                    .from('gallery')
+                    .insert([{ image_url: publicUrl, caption: caption || 'Tanpa keterangan' }]);
+                
+                if (insertError) throw insertError;
+
+                // 4. Update UI
+                await renderGallery(userGalleryContainer, userGalleryPlaceholder);
+                // Jika admin juga login, perbarui galeri admin
+                if (!adminPage.classList.contains('hidden')) {
+                    await renderGallery(adminGalleryContainer, adminGalleryPlaceholder);
+                }
+                userPhotoUpload.value = '';
+                userPhotoCaption.value = '';
+                showUserMessage("Foto berhasil diunggah!", "success", uploadMessage);
+
+            } catch (e) {
+                const message = handleSupabaseFetchError(e, 'upload process');
+                // Pesan error yang lebih eksplisit untuk RLS
+                showUserMessage(`${message} Pastikan RLS di Storage 'gallery' dan tabel 'gallery' sudah diatur.`, "error", uploadMessage);
+            } finally {
+                showLoading(false);
+            }
+        });
+
 
         // === EVENT LISTENERS ===
         loginButton.addEventListener('click', handleLogin);
@@ -778,51 +914,19 @@
         searchNamaInput.addEventListener('keyup', (e) => { if(e.key === 'Enter') renderUserHistory(); });
         downloadExcelButton.addEventListener('click', exportToExcel);
         showQRModalButton.addEventListener('click', () => {
+            if (!supabase) return showUserMessage("Supabase belum terkonfigurasi. Cek API Key.", "error");
             generateQRCode();
             qrModal.classList.remove('hidden');
         });
         closeQRModalButton.addEventListener('click', () => qrModal.classList.add('hidden'));
 
-        // --- Inisialisasi Firebase ---
+        // --- Inisialisasi Aplikasi ---
         document.addEventListener('DOMContentLoaded', async () => {
-            // 1. Inisialisasi Firebase Services
-            try {
-                app = initializeApp(firebaseConfig); 
-                db = getFirestore(app);
-                auth = getAuth(app);
-                setLogLevel('error'); // Setel ke error untuk mengurangi log berlebihan
-                
-                // 2. Setel Auth Listener (KRITIS untuk mendapatkan UID dan memastikan kesiapan)
-                onAuthStateChanged(auth, async (user) => {
-                    if (user) {
-                        userId = user.uid;
-                        isAuthReady = true;
-                    } else {
-                        // Coba sign-in
-                        try {
-                             if (initialAuthToken) {
-                                await signInWithCustomToken(auth, initialAuthToken);
-                             } else {
-                                await signInAnonymously(auth);
-                             }
-                            userId = auth.currentUser.uid;
-                            isAuthReady = true;
-                        } catch (e) {
-                            console.error("Gagal otentikasi Firebase:", e);
-                            isAuthReady = true; // Tetap setel true agar flow aplikasi berlanjut
-                        }
-                    }
-                    
-                    // 3. Tampilkan halaman login setelah inisialisasi
-                    showPage('loginPage');
-                });
-
-            } catch (error) {
-                console.error("Kesalahan fatal saat inisialisasi Firebase:", error);
-                // Tampilkan pesan error di konsol dan UI jika memungkinkan
-                document.getElementById('loginFormContainer').innerHTML = `<p class="text-red-600 text-center">Aplikasi Gagal Dimuat. Cek Konsol untuk detail error Firebase.</p>`;
-            }
+             // Tampilkan halaman login setelah DOM siap, terlepas dari status Supabase
+            showPage('loginPage');
         });
+        
+        } // <-- Kurung kurawal penutup untuk blok Supabase Configuration (Else block)
     </script>
 </body>
 </html>
