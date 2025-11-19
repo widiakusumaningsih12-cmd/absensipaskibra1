@@ -224,7 +224,7 @@
             <header class="bg-white p-4 rounded-xl shadow-md mb-6 flex justify-between items-center flex-wrap gap-4">
                 <h1 class="text-xl font-bold">Dashboard Admin Paskibra</h1>
                 <div class="flex items-center gap-2">
-                    <button id="showQRModalButton" class="px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700">Tampilkan QR Absen</button>
+                    <!-- <button id="showQRModalButton" class="px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700">Tampilkan QR Absen</button> -->
                     <button id="logoutButtonAdmin" class="text-sm font-medium text-white bg-red-600 hover:bg-red-700 px-4 py-2 rounded-md transition-colors">Logout</button>
                 </div>
             </header>
@@ -267,15 +267,15 @@
             </div>
         </div>
 
-        <!-- Modal untuk QR Code -->
-        <div id="qrModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-40">
+        <!-- Modal untuk QR Code (DIHAPUS KARENA FITUR DIHILANGKAN DARI ADMIN) -->
+        <!-- <div id="qrModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-40">
             <div class="bg-white p-8 rounded-lg text-center shadow-xl">
                 <h2 class="text-xl font-bold mb-4">Scan QR Code Ini Untuk Absen</h2>
                 <div id="qrcode" class="flex justify-center"></div>
                 <p class="mt-4 text-sm text-gray-600">QR Code ini hanya berlaku untuk hari ini.</p>
                 <button id="closeQRModalButton" class="mt-6 px-6 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">Tutup</button>
             </div>
-        </div>
+        </div> -->
         
         <!-- Loading Spinner -->
         <div id="loadingSpinner" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
@@ -370,10 +370,10 @@
         const userPointsSpan = document.getElementById('userPoints');
         const rekapTableBody = document.getElementById('rekapTableBody');
         const downloadExcelButton = document.getElementById('downloadExcel');
-        const showQRModalButton = document.getElementById('showQRModalButton');
-        const qrModal = document.getElementById('qrModal');
-        const closeQRModalButton = document.getElementById('closeQRModalButton');
-        const qrcodeContainer = document.getElementById('qrcode');
+        // const showQRModalButton = document.getElementById('showQRModalButton'); // Dihapus
+        // const qrModal = document.getElementById('qrModal'); // Dihapus
+        // const closeQRModalButton = document.getElementById('closeQRModalButton'); // Dihapus
+        // const qrcodeContainer = document.getElementById('qrcode'); // Dihapus
         const userPhotoUpload = document.getElementById('userPhotoUpload');
         const userPhotoCaption = document.getElementById('userPhotoCaption');
         const userUploadPhotoButton = document.getElementById('userUploadPhotoButton');
@@ -582,11 +582,22 @@
                 // Verifikasi QR Code
                 if (decodedText === QR_SECRET_KEY + getTodayDate()) {
                     stopQRScanner();
-                    if(await submitAttendance(nama, kelas, "Hadir")){
+                    
+                    // Coba kirim absensi
+                    const sukses = await submitAttendance(nama, kelas, "Hadir");
+                    
+                    if(sukses){
                          showUserMessage(`Absen Hadir untuk ${nama} berhasil via QR!`, 'success');
                          // Reset form setelah berhasil absen hadir
                          attendanceForm.reset(); 
                          alasanContainer.classList.add('hidden');
+                    } else {
+                        // GAGAL: Beri tahu pengguna bahwa QR valid, tapi RLS/Koneksi gagal.
+                        // Pesan error spesifik (misal RLS) sudah ditampilkan oleh submitAttendance().
+                        // Kita tambahkan pesan ini jika submitAttendance() gagal menampilkan error (jarang terjadi).
+                        if (!userMessage.textContent.includes("Gagal")) {
+                            showUserMessage("QR Code valid, tapi gagal mengirim absensi. (Cek RLS/Koneksi)", "error");
+                        }
                     }
                 } else {
                     showUserMessage("QR Code tidak valid atau sudah kedaluwarsa.", "error");
@@ -768,13 +779,20 @@
             showLoading(false);
         }
         
-        // --- QR Code Generator ---
+        // --- QR Code Generator (Fungsi tidak lagi dipanggil dari admin) ---
         function generateQRCode() {
-            qrcodeContainer.innerHTML = '';
-            const qr = qrcode(0, 'L');
-            qr.addData(QR_SECRET_KEY + getTodayDate());
-            qr.make();
-            qrcodeContainer.innerHTML = qr.createImgTag(6, 8); // size 6, margin 8
+            // Dapatkan elemen qrcode container di sini jika masih diperlukan di masa depan,
+            // atau hapus fungsi ini jika tidak ada bagian lain yang menggunakannya.
+            const qrcodeContainer = document.getElementById('qrcode'); // Perlu didefinisikan jika modal diaktifkan lagi
+            if (qrcodeContainer) {
+                qrcodeContainer.innerHTML = '';
+                const qr = qrcode(0, 'L');
+                qr.addData(QR_SECRET_KEY + getTodayDate());
+                qr.make();
+                qrcodeContainer.innerHTML = qr.createImgTag(6, 8); // size 6, margin 8
+            } else {
+                console.error("Elemen 'qrcode' tidak ditemukan. Modal QR mungkin telah dihapus.");
+            }
         }
         
         // --- Export Rekap ---
@@ -913,12 +931,12 @@
         searchButton.addEventListener('click', renderUserHistory);
         searchNamaInput.addEventListener('keyup', (e) => { if(e.key === 'Enter') renderUserHistory(); });
         downloadExcelButton.addEventListener('click', exportToExcel);
-        showQRModalButton.addEventListener('click', () => {
-            if (!supabase) return showUserMessage("Supabase belum terkonfigurasi. Cek API Key.", "error");
-            generateQRCode();
-            qrModal.classList.remove('hidden');
-        });
-        closeQRModalButton.addEventListener('click', () => qrModal.classList.add('hidden'));
+        // showQRModalButton.addEventListener('click', () => { // Dihapus
+        //     if (!supabase) return showUserMessage("Supabase belum terkonfigurasi. Cek API Key.", "error");
+        //     generateQRCode();
+        //     qrModal.classList.remove('hidden');
+        // });
+        // closeQRModalButton.addEventListener('click', () => qrModal.classList.add('hidden')); // Dihapus
 
         // --- Inisialisasi Aplikasi ---
         document.addEventListener('DOMContentLoaded', async () => {
